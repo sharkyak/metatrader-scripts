@@ -1,0 +1,18 @@
+//@version=5
+indicator("Daily Vertical Lines", overlay=true, max_lines_count=200)
+
+// Храним время как 1400, 1530, 1730
+times = array.from(1400, 1530, 1730, 2000, 2200)
+
+getH(v) => math.floor(v / 100)
+getM(v) => v % 100
+
+tz = "Asia/Bangkok"
+
+for i = 0 to array.size(times) - 1
+    v = array.get(times, i)
+    h = getH(v)
+    m = getM(v)
+    if barstate.isconfirmed and hour(time, tz) == h and minute(time, tz) == m
+        line.new(bar_index, high, bar_index, low, xloc=xloc.bar_index, extend=extend.both, color=color.gray, style=line.style_dotted, width=1)
+
