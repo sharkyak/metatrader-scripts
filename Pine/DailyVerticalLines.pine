@@ -19,6 +19,15 @@ line4amStyle    = switch line4amStyleStr
     "Dashed" => line.style_dashed
     => line.style_dotted
 
+// ── Линия середины диапазона 04:00–12:00 до конца дня
+showMidLine       = input.bool(true,  title="Enable 04:00–12:00 midline", group="04:00–12:00 Midline")
+midLineColor      = input.color(color.orange, title="Line color (midline)", group="04:00–12:00 Midline")
+midLineStyleStr   = input.string("Dashed", title="Line style (midline)", options=["Solid","Dashed","Dotted"], group="04:00–12:00 Midline")
+midLineStyle      = switch midLineStyleStr
+    "Solid"  => line.style_solid
+    "Dashed" => line.style_dashed
+    => line.style_dotted
+
 // Рисует горизонтальную линию от открытия свечи 04:00 (Asia/Bangkok) до конца каждого дня (включая прошедшие)
 drawFourAMOpenLine() =>
     if show4amLine
@@ -38,9 +47,51 @@ drawFourAMOpenLine() =>
             // Горизонтальная линия по цене открытия бара, который первый >= 04:00
             line.new(t4, open, dayEnd, open, xloc=xloc.bar_time, extend=extend.none, color=line4amColor, style=line4amStyle, width=1)
 
+// Рисует горизонтальную линию по середине диапазона 04:00–12:00 (Asia/Bangkok) от 12:00 до конца дня
+// Исторические дни поддерживаются: линия ставится на первом баре, который пересекает 12:00
+drawNoonMidline() =>
+    if showMidLine
+        tz = "Asia/Bangkok"
+        // Компоненты текущего бара в TZ
+        y  = year(time, tz)
+        mo = month(time, tz)
+        d  = dayofmonth(time, tz)
+        // Границы диапазона и конец дня
+        t4   = timestamp(tz, y, mo, d, 4, 0)
+        t12  = timestamp(tz, y, mo, d, 12, 0)
+        dayEnd = timestamp(tz, y, mo, d, 23, 59)
+
+        // Аккумуляторы диапазона 04:00–12:00 на день
+        var int   midDay   = na
+        var float rngH     = na
+        var float rngL     = na
+        var bool  midDrawn = false
+
+        curDay = d
+        if na(midDay) or curDay != midDay
+            midDay   := curDay
+            rngH     := na
+            rngL     := na
+            midDrawn := false
+
+        // Накапливаем high/low в промежутке 04:00–12:00
+        inRange = time >= t4 and time < t12
+        if inRange
+            rngH := na(rngH) ? high : math.max(rngH, high)
+            rngL := na(rngL) ? low  : math.min(rngL, low)
+
+        // На первом баре после 12:00 строим линию середины диапазона до конца дня
+        prevTime = nz(time[1])
+        crossesNoon = not na(prevTime) and prevTime < t12 and time >= t12
+        if barstate.isconfirmed and crossesNoon and not midDrawn and not na(rngH) and not na(rngL)
+            mid = (rngH + rngL) / 2.0
+            line.new(t12, mid, dayEnd, mid, xloc=xloc.bar_time, extend=extend.none, color=midLineColor, style=midLineStyle, width=1)
+            midDrawn := true
+
+// Вертикальные линии по заданным временам (включая историю + план на остаток дня)
 drawDailyVerticalLines() =>
     if showLines
-        // Храним время как 1400, 1530, 1730
+        // Храним время как 1400, 1530, 1730, 2000, 2200
         times = array.from(1400, 1530, 1730, 2000, 2200)
 
         tz = "Asia/Bangkok"
@@ -76,5 +127,7 @@ drawDailyVerticalLines() =>
                     line.new(tstamp, high, tstamp, low, xloc=xloc.bar_time, extend=extend.both, color=lineColor, style=lineStyle, width=1)
             plannedDone := true
 
+// Вызовы
 drawDailyVerticalLines()
 drawFourAMOpenLine()
+drawNoonMidline()
