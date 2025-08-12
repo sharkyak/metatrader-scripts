@@ -1,41 +1,51 @@
 //@version=5
 indicator("Daily Vertical Lines", overlay=true, max_lines_count=200)
 
+// ── Настройки
+showLines     = input.bool(true,  title="Enable lines", group="Appearance")
+lineColor     = input.color(color.gray, title="Line color", group="Appearance")
+lineStyleStr  = input.string("Dotted", title="Line style", options=["Solid","Dashed","Dotted"], group="Appearance")
+lineStyle     = switch lineStyleStr
+    "Solid"  => line.style_solid
+    "Dashed" => line.style_dashed
+    => line.style_dotted
+
 drawDailyVerticalLines() =>
-    // Храним время как 1400, 1530, 1730
-    times = array.from(1400, 1530, 1730, 2000, 2200)
+    if showLines
+        // Храним время как 1400, 1530, 1730
+        times = array.from(1400, 1530, 1730, 2000, 2200)
 
-    tz = "Asia/Bangkok"
+        tz = "Asia/Bangkok"
 
-    // --- ПРОШЛЫЕ ЛИНИИ
-    for i = 0 to array.size(times) - 1
-        v = array.get(times, i)
-        h = math.floor(v / 100)
-        m = v % 100
-        if barstate.isconfirmed and hour(time, tz) == h and minute(time, tz) == m
-            line.new(bar_index, high, bar_index, low, xloc=xloc.bar_index, extend=extend.both, color=color.gray, style=line.style_dotted, width=1)
-
-    // --- линии НА СЕГОДНЯ ВПЕРЁД
-    var int  plannedDay  = na
-    var bool plannedDone = false
-    curDay = dayofmonth(time, tz)
-    if na(plannedDay) or curDay != plannedDay
-        plannedDay  := curDay
-        plannedDone := false
-
-    if barstate.islast and not plannedDone
-        y  = year(time, tz)
-        mo = month(time, tz)
-        d  = curDay
-        nowTs = time
-        dayEnd = timestamp(tz, y, mo, d, 23, 59)
+        // --- ПРОШЛЫЕ ЛИНИИ
         for i = 0 to array.size(times) - 1
             v = array.get(times, i)
             h = math.floor(v / 100)
             m = v % 100
-            tstamp = timestamp(tz, y, mo, d, h, m)
-            if tstamp >= nowTs and tstamp <= dayEnd
-                line.new(tstamp, high, tstamp, low, xloc=xloc.bar_time, extend=extend.both, color=color.gray, style=line.style_dotted, width=1)
-        plannedDone := true
+            if barstate.isconfirmed and hour(time, tz) == h and minute(time, tz) == m
+                line.new(bar_index, high, bar_index, low, xloc=xloc.bar_index, extend=extend.both, color=lineColor, style=lineStyle, width=1)
+
+        // --- линии НА СЕГОДНЯ ВПЕРЁД
+        var int  plannedDay  = na
+        var bool plannedDone = false
+        curDay = dayofmonth(time, tz)
+        if na(plannedDay) or curDay != plannedDay
+            plannedDay  := curDay
+            plannedDone := false
+
+        if barstate.islast and not plannedDone
+            y  = year(time, tz)
+            mo = month(time, tz)
+            d  = curDay
+            nowTs = time
+            dayEnd = timestamp(tz, y, mo, d, 23, 59)
+            for i = 0 to array.size(times) - 1
+                v = array.get(times, i)
+                h = math.floor(v / 100)
+                m = v % 100
+                tstamp = timestamp(tz, y, mo, d, h, m)
+                if tstamp >= nowTs and tstamp <= dayEnd
+                    line.new(tstamp, high, tstamp, low, xloc=xloc.bar_time, extend=extend.both, color=lineColor, style=lineStyle, width=1)
+            plannedDone := true
 
 drawDailyVerticalLines()
