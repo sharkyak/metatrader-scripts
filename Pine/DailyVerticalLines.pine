@@ -10,6 +10,34 @@ lineStyle     = switch lineStyleStr
     "Dashed" => line.style_dashed
     => line.style_dotted
 
+// ── Линия от открытия свечи в 04:00 до конца дня
+show4amLine     = input.bool(true,  title="Enable 04:00 open line", group="04:00 Open")
+line4amColor    = input.color(color.teal, title="Line color (04:00)", group="04:00 Open")
+line4amStyleStr = input.string("Solid", title="Line style (04:00)", options=["Solid","Dashed","Dotted"], group="04:00 Open")
+line4amStyle    = switch line4amStyleStr
+    "Solid"  => line.style_solid
+    "Dashed" => line.style_dashed
+    => line.style_dotted
+
+// Рисует горизонтальную линию от открытия свечи 04:00 (Asia/Bangkok) до конца каждого дня (включая прошедшие)
+drawFourAMOpenLine() =>
+    if show4amLine
+        tz = "Asia/Bangkok"
+        // Компоненты текущего бара в TZ
+        y  = year(time, tz)
+        mo = month(time, tz)
+        d  = dayofmonth(time, tz)
+        // Таймстамп 04:00 для этого дня
+        t4 = timestamp(tz, y, mo, d, 4, 0)
+        // Срабатываем на первом баре дня, который пересекает момент 04:00
+        prevTime = nz(time[1])
+        crossesFour = not na(prevTime) and prevTime < t4 and time >= t4
+        if barstate.isconfirmed and crossesFour
+            // Конец дня 23:59 в том же часовом поясе
+            dayEnd = timestamp(tz, y, mo, d, 23, 59)
+            // Горизонтальная линия по цене открытия бара, который первый >= 04:00
+            line.new(t4, open, dayEnd, open, xloc=xloc.bar_time, extend=extend.none, color=line4amColor, style=line4amStyle, width=1)
+
 drawDailyVerticalLines() =>
     if showLines
         // Храним время как 1400, 1530, 1730
@@ -49,3 +77,4 @@ drawDailyVerticalLines() =>
             plannedDone := true
 
 drawDailyVerticalLines()
+drawFourAMOpenLine()
