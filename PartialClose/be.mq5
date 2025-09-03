@@ -2,20 +2,11 @@
 CTrade trade;
 
 // === Входные параметры
-input double TARGET_RR = 2.0;           // Целевой риск/ревард
-input bool MOVE_TO_BE_ONLY = true;     // TRUE: только SL->BE, FALSE: SL->BE + частичное закрытие
+input double TARGET_RR = 3.0;           // Целевой риск/ревард
+input bool MOVE_TO_BE_ONLY = false;     // TRUE: только SL->BE
 
-// === Внутреннее хранилище уже обработанных позиций (по ticket)
-ulong processed_tickets[];
-
-//+------------------------------------------------------------------+
-//| OnInit: очистить список обработанных                            |
-//+------------------------------------------------------------------+
-int OnInit()
-{
-   ArrayResize(processed_tickets, 0);
-   return INIT_SUCCEEDED;
-}
+// === Глобальные переменные для отслеживания обработанных тикетов через Global Variables
+#define GV_PREFIX "processed_ticket_"
 
 //+------------------------------------------------------------------+
 //| OnTick: основной цикл обработки                                 |
@@ -115,12 +106,8 @@ bool HasReachedTargetRR(int type, double entry_price, double initial_sl,
 //+------------------------------------------------------------------+
 bool IsProcessed(ulong ticket)
 {
-   for (int i = 0; i < ArraySize(processed_tickets); i++)
-   {
-      if (processed_tickets[i] == ticket)
-         return true;
-   }
-   return false;
+   string gv_name = GV_PREFIX + (string)ticket;
+   return GlobalVariableCheck(gv_name);
 }
 
 //+------------------------------------------------------------------+
@@ -128,9 +115,8 @@ bool IsProcessed(ulong ticket)
 //+------------------------------------------------------------------+
 void AddToProcessed(ulong ticket)
 {
-   int size = ArraySize(processed_tickets);
-   ArrayResize(processed_tickets, size + 1);
-   processed_tickets[size] = ticket;
+   string gv_name = GV_PREFIX + (string)ticket;
+   GlobalVariableSet(gv_name, TimeCurrent());
 }
 
 //+------------------------------------------------------------------+
