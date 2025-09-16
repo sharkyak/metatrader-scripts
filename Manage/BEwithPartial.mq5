@@ -1,6 +1,6 @@
 #property copyright "Copyright 2025, Aleksand Kazakov"
-#property version   "2.0"
-#property description "Переносит SL в BE при достижении целевого RR и опционально частично закрывает позицию."
+#property version   "2.1"
+#property description "Переносит SL в BE при достижении целевого RR и опционально частично закрывает позицию. Пропускает позиции без SL."
 
 #include <Trade/Trade.mqh>
 CTrade trade;
@@ -33,6 +33,12 @@ void OnTick()
       double sl      = PositionGetDouble(POSITION_SL);
       double tp      = PositionGetDouble(POSITION_TP);
       double volume  = PositionGetDouble(POSITION_VOLUME);
+
+      // Если SL равен 0.0, значит он не установлен. Пропускаем эту позицию.
+      if (sl == 0.0)
+      {
+         continue;
+      }
 
       if (type != POSITION_TYPE_BUY && type != POSITION_TYPE_SELL)
          continue;
