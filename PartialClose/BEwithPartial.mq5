@@ -1,3 +1,7 @@
+#property copyright "Copyright 2025, Aleksand Kazakov"
+#property version   "2.0"
+#property description "Переносит SL в BE при достижении целевого RR и опционально частично закрывает позицию."
+
 #include <Trade/Trade.mqh>
 CTrade trade;
 
