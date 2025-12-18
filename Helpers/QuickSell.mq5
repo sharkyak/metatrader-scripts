@@ -1,67 +1,16 @@
 #property copyright "Copyright 2025, Aleksand Kazakov"
-#property version   "1.20"
-#property description "Calculates lot size based on SL price and risk in USD, then opens a single SELL position. Minimal version."
+#property version   "1.21"
+#property description "Calculates lot size based on SL price and risk in USD, then opens a single SELL position."
+#property script_show_inputs
 
 #include <Trade\Trade.mqh>
 
-//--- Expert Advisor Input Parameters
+//--- Script Input Parameters
 input double InpStopLossPrice = 0;      // Stop Loss Price Level
 input double InpRiskSizeUSD   = 20.0;   // Risk Size in USD
 
 //--- Global CTrade instance
 CTrade trade;
-
-//+------------------------------------------------------------------+
-//| Expert initialization function                                   |
-//+------------------------------------------------------------------+
-int OnInit()
-{
-   //--- Get current symbol information
-   string currentSymbol = _Symbol;
-   SymbolInfoDouble(currentSymbol, SYMBOL_BID); // Ensure market watch is updated with the latest prices
-   double bidPrice = SymbolInfoDouble(currentSymbol, SYMBOL_BID);
-   
-   //--- 1. VALIDATE INPUTS ---
-   // Essential check: Stop Loss for a SELL must be above the entry price
-   if(InpStopLossPrice <= bidPrice)
-   {
-      Alert("Error: For a SELL order, the Stop Loss Price must be above the current Bid Price (", bidPrice, "). EA will be removed.");
-      return(INIT_FAILED);
-   }
-   
-   //--- 2. CALCULATE LOT SIZE ---
-   double lotSize = CalculateLotSize(currentSymbol, bidPrice, InpStopLossPrice, InpRiskSizeUSD);
-   
-   if(lotSize <= 0)
-   {
-      // An alert is fired from the calculation function. Stop execution.
-      return(INIT_FAILED);
-   }
-   
-   Print("Calculated Lot Size: ", lotSize, " for Symbol: ", currentSymbol);
-   
-   //--- 3. OPEN SELL POSITION ---
-   Print("Attempting to open SELL position...");
-   
-   // The trade will be placed with a default magic number of 0
-   bool result = trade.Sell(lotSize, currentSymbol, bidPrice, InpStopLossPrice, 0, "QuickSell EA Order");
-   
-   if(result)
-   {
-      Print("SELL order successfully placed for ", currentSymbol, " with lot size ", lotSize);
-      Alert("Success! SELL order placed for ", lotSize, " lots on ", currentSymbol);
-   }
-   else
-   {
-      Print("Failed to place SELL order. Result code: ", trade.ResultRetcode(), ", Message: ", trade.ResultComment());
-      Alert("Error: Could not place SELL order. Check the Experts or Journal tab for details.");
-      return(INIT_FAILED);
-   }
-
-   //--- Initialization completed successfully
-   Print("QuickSellExpert has finished its task and will now remain idle.");
-   return(INIT_SUCCEEDED);
-}
 
 //+------------------------------------------------------------------+
 //| Function to calculate the appropriate lot size                   |
@@ -82,7 +31,9 @@ double CalculateLotSize(string symbol, double entryPrice, double stopLossPrice, 
    }
 
    //--- Calculate the loss in account currency if 1 lot is traded
-   double stopLossDistance = stopLossPrice - entryPrice; // For a SELL, SL is above entry
+   // Formula: (Distance / TickSize) * TickValue
+   // For a SELL, SL is above entry, so distance = SL - Entry
+   double stopLossDistance = stopLossPrice - entryPrice;
    double lossPerLot = (stopLossDistance / tickSize) * tickValue;
    
    if(lossPerLot <= 0)
@@ -95,7 +46,17 @@ double CalculateLotSize(string symbol, double entryPrice, double stopLossPrice, 
    double calculatedLot = riskAmount / lossPerLot;
    
    //--- Normalize the lot size according to broker's rules
-   calculatedLot = floor(calculatedLot / volumeStep) * volumeStep;
+   // Using MathFloor to safely round down to the nearest step
+   calculatedLot = MathFloor(calculatedLot / volumeStep) * volumeStep;
+   
+   // Ensure lot is normalized to standard decimals to avoid floating point anomalies (e.g. 0.0300000001)
+   double lotDecimals = 0;
+   if(volumeStep == 0.01) lotDecimals = 2;
+   else if(volumeStep == 0.1) lotDecimals = 1;
+   else if(volumeStep == 1.0) lotDecimals = 0;
+   else lotDecimals = 8; // Fallback
+   
+   if(lotDecimals <= 2) calculatedLot = NormalizeDouble(calculatedLot, (int)lotDecimals);
 
    //--- Check against min and max lot size
    if(calculatedLot < volumeMin)
@@ -114,19 +75,64 @@ double CalculateLotSize(string symbol, double entryPrice, double stopLossPrice, 
 }
 
 //+------------------------------------------------------------------+
-//| Expert tick function - Intentionally left empty                  |
+//| Script program start function                                    |
 //+------------------------------------------------------------------+
-void OnTick()
+void OnStart()
 {
-   //--- Do nothing after initialization
+   //--- Get current symbol information
+   string currentSymbol = _Symbol;
+   
+   // Refresh symbol data
+   if(!SymbolInfoDouble(currentSymbol, SYMBOL_BID, 0)) 
+   {
+      // Fallback
+   }
+   
+   double bidPrice = SymbolInfoDouble(currentSymbol, SYMBOL_BID);
+   int digits = (int)SymbolInfoInteger(currentSymbol, SYMBOL_DIGITS);
+   
+   //--- 1. VALIDATE INPUTS ---
+   // Essential check: Stop Loss for a SELL must be ABOVE the entry price
+   if(InpStopLossPrice <= 0)
+   {
+      Alert("Error: Please specify a valid Stop Loss Price > 0.");
+      return;
+   }
+   
+   if(InpStopLossPrice <= bidPrice)
+   {
+      Alert("Error: For a SELL order, the Stop Loss Price must be above the current Bid Price (", bidPrice, ").");
+      return;
+   }
+   
+   // Normalize SL to prevent server rejection on some brokers
+   double normSL = NormalizeDouble(InpStopLossPrice, digits);
+   
+   //--- 2. CALCULATE LOT SIZE ---
+   // Note: We use 'bidPrice' for SELL entry
+   double lotSize = CalculateLotSize(currentSymbol, bidPrice, normSL, InpRiskSizeUSD);
+   
+   if(lotSize <= 0)
+   {
+      // An alert is fired from the calculation function. Stop execution.
+      return;
+   }
+   
+   Print("Calculated Lot Size: ", lotSize, " for Symbol: ", currentSymbol);
+   
+   //--- 3. OPEN SELL POSITION ---
+   Print("Attempting to open SELL position...");
+   
+   // trade.Sell(volume, symbol, price, sl, tp, comment)
+   // Using normalized SL
+   if(trade.Sell(lotSize, currentSymbol, bidPrice, normSL, 0, "QuickSell Script Order"))
+   {
+      Print("SELL order successfully placed for ", currentSymbol, " with lot size ", lotSize);
+      Alert("Success! SELL order placed for ", lotSize, " lots on ", currentSymbol);
+   }
+   else
+   {
+      Print("Failed to place SELL order. Result code: ", trade.ResultRetcode(), ", Message: ", trade.ResultComment());
+      Alert("Error: Could not place SELL order. Check the Journal tab for details.");
+   }
 }
-
-//+------------------------------------------------------------------+
-//| Expert deinitialization function                                 |
-//+------------------------------------------------------------------+
-void OnDeinit(const int reason)
-{
-   //---
-   Print("QuickSellExpert removed. Reason code: ", reason);
-}
-//+------------------------------------------------------------------+
