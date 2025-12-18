@@ -85,12 +85,13 @@ void OnStart()
    string currentSymbol = _Symbol;
    
    // Refresh symbol data to ensure latest prices
-   if(!SymbolInfoDouble(currentSymbol, SYMBOL_ASK, 0)) // Tries to refresh
+   // Refresh symbol data to ensure latest prices
+   double askPrice = 0;
+   if(!SymbolInfoDouble(currentSymbol, SYMBOL_ASK, askPrice))
    {
-      // Fallback
+      Alert("Error: Failed to get Ask price for ", currentSymbol);
+      return;
    }
-   
-   double askPrice = SymbolInfoDouble(currentSymbol, SYMBOL_ASK);
    int digits = (int)SymbolInfoInteger(currentSymbol, SYMBOL_DIGITS);
    
    //--- 1. VALIDATE INPUTS ---

@@ -83,12 +83,13 @@ void OnStart()
    string currentSymbol = _Symbol;
    
    // Refresh symbol data
-   if(!SymbolInfoDouble(currentSymbol, SYMBOL_BID, 0)) 
+   // Refresh symbol data
+   double bidPrice = 0;
+   if(!SymbolInfoDouble(currentSymbol, SYMBOL_BID, bidPrice)) 
    {
-      // Fallback
+      Alert("Error: Failed to get Bid price for ", currentSymbol);
+      return;
    }
-   
-   double bidPrice = SymbolInfoDouble(currentSymbol, SYMBOL_BID);
    int digits = (int)SymbolInfoInteger(currentSymbol, SYMBOL_DIGITS);
    
    //--- 1. VALIDATE INPUTS ---
