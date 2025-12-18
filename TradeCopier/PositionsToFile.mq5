@@ -69,13 +69,14 @@ void CheckOpenPositions()
          long type = PositionGetInteger(POSITION_TYPE);
          double open_price = PositionGetDouble(POSITION_PRICE_OPEN);
          double volume = PositionGetDouble(POSITION_VOLUME);
+         long digits = SymbolInfoInteger(symbol, SYMBOL_DIGITS);
          string type_str = (type == POSITION_TYPE_BUY) ? "buy" : "sell";
 
          FileWrite(file_handle,
                    (string)position_ticket,
                    symbol,
                    type_str,
-                   DoubleToString(open_price, _Digits),
+                   DoubleToString(open_price, (int)digits),
                    DoubleToString(volume, 2));
         }
      }
