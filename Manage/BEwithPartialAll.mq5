@@ -1,6 +1,6 @@
 #property copyright "Copyright 2025, Aleksand Kazakov"
-#property version   "2.2"
-#property description "Переносит SL в BE при достижении целевого RR и опционально частично закрывает позицию. Пропускает позиции без SL. Работает только с позициями на текущем графике."
+#property version   "2.1"
+#property description "Переносит SL в BE при достижении целевого RR и опционально частично закрывает позицию. Пропускает позиции без SL."
 
 #include <Trade/Trade.mqh>
 CTrade trade;
@@ -28,13 +28,6 @@ void OnTick()
          continue;
 
       string symbol  = PositionGetString(POSITION_SYMBOL);
-      
-      // Проверяем, соответствует ли символ позиции символу текущего графика
-      if (symbol != _Symbol)
-      {
-         continue; // Если нет, переходим к следующей позиции
-      }
-
       int type       = (int)PositionGetInteger(POSITION_TYPE);
       double entry   = PositionGetDouble(POSITION_PRICE_OPEN);
       double sl      = PositionGetDouble(POSITION_SL);
@@ -64,13 +57,13 @@ void OnTick()
          continue;
 
       // Переносим SL в точку входа
-      if (trade.PositionModify(ticket, entry, tp))
+      if (trade.PositionModify(symbol, entry, tp))
       {
          PrintFormat("✅ %s | Ticket #%d | RR %.2f достигнут — SL перенесён на %.5f", symbol, ticket, current_rr, entry);
       }
       else
       {
-         PrintFormat("❌ %s | Ticket #%d | Ошибка переноса SL. Код: %d", symbol, ticket, trade.ResultRetcode());
+         PrintFormat("❌ %s | Ticket #%d | Ошибка переноса SL", symbol, ticket);
          continue;
       }
 
@@ -81,13 +74,13 @@ void OnTick()
 
          if (volume_to_close >= min_lot && volume_to_close < volume)
          {
-            if (trade.PositionClosePartial(ticket, volume_to_close))
+            if (trade.PositionClosePartial(symbol, volume_to_close))
             {
                PrintFormat("🟡 %s | Ticket #%d | Частично закрыто %.2f лота из %.2f", symbol, ticket, volume_to_close, volume);
             }
             else
             {
-               PrintFormat("❌ %s | Ticket #%d | Ошибка частичного закрытия %.2f лота. Код: %d", symbol, ticket, volume_to_close, trade.ResultRetcode());
+               PrintFormat("❌ %s | Ticket #%d | Ошибка частичного закрытия %.2f лота", symbol, ticket, volume_to_close);
             }
          }
       }
@@ -104,7 +97,7 @@ bool HasReachedTargetRR(int type, double entry_price, double initial_sl,
                         double &out_rr)
 {
    double risk = MathAbs(entry_price - initial_sl);
-   if (risk < 1e-6) // Используем малое число для сравнения с нулем
+   if (risk < 1e-6)
       return false;
 
    double reward_now = 0.0;
@@ -141,6 +134,5 @@ void AddToProcessed(ulong ticket)
 //+------------------------------------------------------------------+
 double NormalizeLot(double volume, double step)
 {
-   if (step <= 0) return volume;
    return MathFloor(volume / step) * step;
 }
