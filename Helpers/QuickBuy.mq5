@@ -1,4 +1,4 @@
-#property copyright "Copyright 2025, Aleksand Kazakov"
+#property copyright "Copyright 2025, Aleksandr Kazakov"
 #property version   "1.21"
 #property description "Calculates lot size based on SL price and risk in USD, then opens a single BUY position."
 #property script_show_inputs
@@ -52,13 +52,13 @@ double CalculateLotSize(string symbol, double entryPrice, double stopLossPrice, 
    // Ensure lot is normalized to standard decimals to avoid floating point anomalies (e.g. 0.0300000001)
    // We use a small epsilon trick or just rely on the step. 
    // CTrade usually handles this, but creating a clean double is better.
-   double lotDecimals = 0;
+   int lotDecimals = 0;
    if(volumeStep == 0.01) lotDecimals = 2;
    else if(volumeStep == 0.1) lotDecimals = 1;
    else if(volumeStep == 1.0) lotDecimals = 0;
    else lotDecimals = 8; // Fallback
-   
-   if(lotDecimals <= 2) calculatedLot = NormalizeDouble(calculatedLot, (int)lotDecimals);
+
+   calculatedLot = NormalizeDouble(calculatedLot, lotDecimals);
 
    //--- Check against min and max lot size
    if(calculatedLot < volumeMin)
@@ -84,7 +84,6 @@ void OnStart()
    //--- Get current symbol information
    string currentSymbol = _Symbol;
    
-   // Refresh symbol data to ensure latest prices
    // Refresh symbol data to ensure latest prices
    double askPrice = 0;
    if(!SymbolInfoDouble(currentSymbol, SYMBOL_ASK, askPrice))
