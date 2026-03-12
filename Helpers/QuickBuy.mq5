@@ -1,5 +1,5 @@
 #property copyright "Copyright 2025, Aleksandr Kazakov"
-#property version   "1.21"
+#property version   "1.30"
 #property description "Calculates lot size based on SL price and risk in USD, then opens a single BUY position."
 #property script_show_inputs
 
@@ -15,48 +15,38 @@ CTrade trade;
 //+------------------------------------------------------------------+
 //| Function to calculate the appropriate lot size                   |
 //+------------------------------------------------------------------+
-double CalculateLotSize(string symbol, double entryPrice, double stopLossPrice, double riskAmount)
+double CalculateLotSize(string symbol, ENUM_ORDER_TYPE orderType, double entryPrice, double stopLossPrice, double riskAmount)
 {
-   //--- Get symbol properties
-   double tickValue = SymbolInfoDouble(symbol, SYMBOL_TRADE_TICK_VALUE);
-   double tickSize = SymbolInfoDouble(symbol, SYMBOL_TRADE_TICK_SIZE);
-   double volumeStep = SymbolInfoDouble(symbol, SYMBOL_VOLUME_STEP);
-   double volumeMin = SymbolInfoDouble(symbol, SYMBOL_VOLUME_MIN);
-   double volumeMax = SymbolInfoDouble(symbol, SYMBOL_VOLUME_MAX);
-   
-   if(tickSize <= 0 || tickValue <= 0)
+   //--- Use OrderCalcProfit to get the loss per 1 lot if SL is hit
+   double profit = 0;
+   if(!OrderCalcProfit(orderType, symbol, 1.0, entryPrice, stopLossPrice, profit))
    {
-      Alert("Error: Invalid symbol properties (Tick Size/Value) for ", symbol, ". Cannot calculate lot size.");
+      Alert("Error: OrderCalcProfit failed for ", symbol, ". Error: ", GetLastError());
       return(0);
    }
 
-   //--- Calculate the loss in account currency if 1 lot is traded
-   // Formula: (Distance / TickSize) * TickValue
-   // This correctly handles Contract Size and Digits because TickValue is based on 1 lot contract size.
-   double stopLossDistance = entryPrice - stopLossPrice;
-   double lossPerLot = (stopLossDistance / tickSize) * tickValue;
-   
+   double lossPerLot = MathAbs(profit);
    if(lossPerLot <= 0)
    {
       Alert("Error: Could not calculate loss per lot. Check prices and symbol info.");
       return(0);
    }
-   
+
    //--- Calculate the raw lot size
    double calculatedLot = riskAmount / lossPerLot;
-   
+
    //--- Normalize the lot size according to broker's rules
-   // Using MathFloor to safely round down to the nearest step
+   double volumeStep = SymbolInfoDouble(symbol, SYMBOL_VOLUME_STEP);
+   double volumeMin = SymbolInfoDouble(symbol, SYMBOL_VOLUME_MIN);
+   double volumeMax = SymbolInfoDouble(symbol, SYMBOL_VOLUME_MAX);
+
    calculatedLot = MathFloor(calculatedLot / volumeStep) * volumeStep;
-   
-   // Ensure lot is normalized to standard decimals to avoid floating point anomalies (e.g. 0.0300000001)
-   // We use a small epsilon trick or just rely on the step. 
-   // CTrade usually handles this, but creating a clean double is better.
+
    int lotDecimals = 0;
    if(volumeStep == 0.01) lotDecimals = 2;
    else if(volumeStep == 0.1) lotDecimals = 1;
    else if(volumeStep == 1.0) lotDecimals = 0;
-   else lotDecimals = 8; // Fallback
+   else lotDecimals = 8;
 
    calculatedLot = NormalizeDouble(calculatedLot, lotDecimals);
 
@@ -66,13 +56,13 @@ double CalculateLotSize(string symbol, double entryPrice, double stopLossPrice, 
       Alert("Warning: Calculated lot size (", calculatedLot, ") is smaller than the minimum allowed (", volumeMin, "). The minimum lot size will be used instead.");
       calculatedLot = volumeMin;
    }
-   
+
    if(calculatedLot > volumeMax)
    {
       Alert("Warning: Calculated lot size (", calculatedLot, ") is larger than the maximum allowed (", volumeMax, "). The maximum lot size will be used instead.");
       calculatedLot = volumeMax;
    }
-   
+
    return(calculatedLot);
 }
 
@@ -111,7 +101,7 @@ void OnStart()
    double normSL = NormalizeDouble(InpStopLossPrice, digits);
    
    //--- 2. CALCULATE LOT SIZE ---
-   double lotSize = CalculateLotSize(currentSymbol, askPrice, normSL, InpRiskSizeUSD);
+   double lotSize = CalculateLotSize(currentSymbol, ORDER_TYPE_BUY, askPrice, normSL, InpRiskSizeUSD);
    
    if(lotSize <= 0)
    {
@@ -122,10 +112,6 @@ void OnStart()
    Print("Calculated Lot Size: ", lotSize, " for Symbol: ", currentSymbol);
    
    //--- 3. OPEN BUY POSITION ---
-   Print("Attempting to open BUY position...");
-   
-   // The trade will be placed with a default magic number of 0
-   // Using normalized SL
    if(trade.Buy(lotSize, currentSymbol, askPrice, normSL, 0, "QuickBuy Script Order"))
    {
       Print("BUY order successfully placed for ", currentSymbol, " with lot size ", lotSize);
