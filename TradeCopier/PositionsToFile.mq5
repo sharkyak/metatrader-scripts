@@ -3,16 +3,15 @@
 //|                      Copyright 2025, Ваш программист-помощник AI |
 //|                                           https://www.google.com |
 //+------------------------------------------------------------------+
-#property copyright "Copyright 2025, Ваш программист-помощник AI"
-#property link      "https://www.google.com"
-#property version   "1.60" // Без генерации имен.
+#property copyright "Copyright 2025"
+#property version   "2.00"
 #property indicator_chart_window
 #property indicator_plots 0
 
 //--- Входные параметры
-input int    TimerPeriodSeconds = 1;                  // Период работы в секундах
-input string PositionsFileName  = "open_positions.csv"; // Имя основного файла
-input string TempFileName       = "open_positions.tmp"; // Имя временного файла
+input int    TimerPeriodSeconds = 1;                        // Период работы в секундах
+input string PositionsFileName  = "mt5_copy_orders.txt";    // Имя основного файла
+input string TempFileName       = "mt5_copy_orders.tmp";    // Имя временного файла
 
 //+------------------------------------------------------------------+
 //| Custom indicator initialization function                         |
@@ -52,7 +51,7 @@ void CheckOpenPositions()
       return;
      }
 
-   int file_handle = FileOpen(TempFileName, FILE_WRITE|FILE_CSV|FILE_ANSI|FILE_COMMON, ",");
+   int file_handle = FileOpen(TempFileName, FILE_WRITE|FILE_TXT|FILE_ANSI|FILE_COMMON);
 
    if(file_handle == INVALID_HANDLE)
      {
@@ -65,19 +64,22 @@ void CheckOpenPositions()
       ulong position_ticket = PositionGetTicket(i);
       if(position_ticket > 0)
         {
-         string symbol = PositionGetString(POSITION_SYMBOL);
-         long type = PositionGetInteger(POSITION_TYPE);
-         double open_price = PositionGetDouble(POSITION_PRICE_OPEN);
-         double volume = PositionGetDouble(POSITION_VOLUME);
-         long digits = SymbolInfoInteger(symbol, SYMBOL_DIGITS);
-         string type_str = (type == POSITION_TYPE_BUY) ? "buy" : "sell";
+         string symbol     = PositionGetString(POSITION_SYMBOL);
+         long   type       = PositionGetInteger(POSITION_TYPE);
+         double volume     = PositionGetDouble(POSITION_VOLUME);
+         double price_open = PositionGetDouble(POSITION_PRICE_OPEN);
+         double sl         = PositionGetDouble(POSITION_SL);
+         double tp         = PositionGetDouble(POSITION_TP);
+         long   magic      = PositionGetInteger(POSITION_MAGIC);
+         int    digits     = (int)SymbolInfoInteger(symbol, SYMBOL_DIGITS);
 
-         FileWrite(file_handle,
-                   (string)position_ticket,
-                   symbol,
-                   type_str,
-                   DoubleToString(open_price, (int)digits),
-                   DoubleToString(volume, 2));
+         string line = StringFormat("%s|%d|%.2f|%s|%s|%s|%d",
+                        symbol, type, volume,
+                        DoubleToString(price_open, digits),
+                        DoubleToString(sl, digits),
+                        DoubleToString(tp, digits),
+                        magic);
+         FileWriteString(file_handle, line + "\n");
         }
      }
 
