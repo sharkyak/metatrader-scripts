@@ -152,6 +152,12 @@ int OnCalculate(const int rates_total,
          ExtMaxBuffer[i] = ExtMaxBuffer[i-1];
          ExtMinBuffer[i] = ExtMinBuffer[i-1];
 
+         // If previous max was empty, initialize it
+         if (ExtMaxBuffer[i-1] == EMPTY_VALUE || ExtMaxBuffer[i-1] == 0)
+         {
+            ExtMaxBuffer[i] = current_spread;
+         }
+
          // If previous min was empty, initialize it
          if (ExtMinBuffer[i-1] == EMPTY_VALUE || ExtMinBuffer[i-1] == 0)
          {

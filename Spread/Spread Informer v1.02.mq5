@@ -96,14 +96,16 @@ void OnTick()
       _MaxSpreadTime = CurrentTime;
    }
    
-   if (_MinSpread > ActSpread || _MinSpreadTime <= 0){
+   if (ActSpread > 0 && (_MinSpread > ActSpread || _MinSpreadTime <= 0)){
       _MinSpread = ActSpread;
       _MinSpreadTime = CurrentTime;
    }
    
 //---average spread
-   _AveSpread += ActSpread;
-   ++_AveSpreadV;
+   if (ActSpread > 0){
+      _AveSpread += ActSpread;
+      ++_AveSpreadV;
+   }
    
 //---time info
    _EndTime = CurrentTime;
