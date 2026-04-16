@@ -40,14 +40,29 @@ double CalculateLotSize(string symbol, ENUM_ORDER_TYPE orderType, double entryPr
    double volumeMin = SymbolInfoDouble(symbol, SYMBOL_VOLUME_MIN);
    double volumeMax = SymbolInfoDouble(symbol, SYMBOL_VOLUME_MAX);
 
-   calculatedLot = MathFloor(calculatedLot / volumeStep) * volumeStep;
-
    int lotDecimals = 0;
    if(volumeStep == 0.01) lotDecimals = 2;
    else if(volumeStep == 0.1) lotDecimals = 1;
    else if(volumeStep == 1.0) lotDecimals = 0;
    else lotDecimals = 8;
 
+   //--- Calculate max volume based on free margin (with 5% reserve for slippage)
+   double marginPerLot = 0;
+   if(OrderCalcMargin(orderType, symbol, 1.0, entryPrice, marginPerLot) && marginPerLot > 0)
+   {
+      double freeMargin = AccountInfoDouble(ACCOUNT_MARGIN_FREE);
+      double maxVolumeByMargin = (freeMargin * 0.95) / marginPerLot;
+      maxVolumeByMargin = NormalizeDouble(MathFloor(maxVolumeByMargin / volumeStep) * volumeStep, lotDecimals);
+      if(maxVolumeByMargin < volumeMax)
+         volumeMax = maxVolumeByMargin;
+      Print("Free margin: ", freeMargin, ", Margin per lot: ", marginPerLot, ", Max volume by margin (95%): ", maxVolumeByMargin);
+   }
+   else
+   {
+      Alert("Warning: Could not calculate margin per lot. Using broker max volume only.");
+   }
+
+   calculatedLot = MathFloor(calculatedLot / volumeStep) * volumeStep;
    calculatedLot = NormalizeDouble(calculatedLot, lotDecimals);
 
    //--- Check against min and max lot size
@@ -59,7 +74,7 @@ double CalculateLotSize(string symbol, ENUM_ORDER_TYPE orderType, double entryPr
 
    if(calculatedLot > volumeMax)
    {
-      Alert("Warning: Calculated lot size (", calculatedLot, ") is larger than the maximum allowed (", volumeMax, "). The maximum lot size will be used instead.");
+      Alert("Warning: Calculated lot size (", calculatedLot, ") exceeds max allowed by margin/broker (", volumeMax, "). Clamping to maximum.");
       calculatedLot = volumeMax;
    }
 
