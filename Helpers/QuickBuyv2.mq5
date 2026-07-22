@@ -1,5 +1,5 @@
 #property copyright "Copyright 2025, Aleksandr Kazakov"
-#property version   "1.01"
+#property version   "1.02"
 #property description "Calculates lot size based on SL price and risk in USD, then opens a single BUY position with optional TP."
 #property script_show_inputs
 
@@ -10,6 +10,8 @@ input double InpStopLossPrice = 0;      // Stop Loss Price Level
 input double InpRiskSizeUSD   = 20.0;   // Risk Size in USD
 input bool   InpSetTP         = true;   // Set Take Profit?
 input double InpRR            = 1.0;    // Risk:Reward Ratio
+input bool   InpForceMinLot   = false;  // If risk too small, use min lot anyway (risk will exceed target)
+input int    InpDeviation     = 50;     // Max slippage in points (avoids "off quotes" rejection)
 
 //--- Global CTrade instance
 CTrade trade;
@@ -107,7 +109,8 @@ double CalcLossPerLot(const string symbol, const ENUM_ORDER_TYPE orderType,
 //+------------------------------------------------------------------+
 double CalculateLotSize(string symbol, ENUM_ORDER_TYPE orderType, double entryPrice, double stopLossPrice, double riskAmount)
 {
-   if(entryPrice <= 0.0 || stopLossPrice <= 0.0 || MathAbs(entryPrice - stopLossPrice) < _Point * 0.5)
+   double symPoint = SymbolInfoDouble(symbol, SYMBOL_POINT);
+   if(entryPrice <= 0.0 || stopLossPrice <= 0.0 || MathAbs(entryPrice - stopLossPrice) < symPoint * 0.5)
    {
       Alert("Error: Invalid entry/SL for lot calc. entry=", entryPrice, " sl=", stopLossPrice);
       return 0.0;
@@ -160,9 +163,18 @@ double CalculateLotSize(string symbol, ENUM_ORDER_TYPE orderType, double entryPr
    //--- Check against min and max lot size
    if(calculatedLot < volumeMin)
    {
-      Alert("Warning: Calculated lot size (", calculatedLot,
-            ") is smaller than the minimum allowed (", volumeMin,
-            "). The minimum lot size will be used instead.");
+      double minLotRisk = volumeMin * lossPerLot;
+      if(!InpForceMinLot)
+      {
+         Alert("Error: Calculated lot (", calculatedLot, ") < min lot (", volumeMin,
+               "). Using min lot would risk ~", DoubleToString(minLotRisk, 2),
+               " USD (> target ", DoubleToString(riskAmount, 2),
+               "). Widen SL, raise risk, or enable InpForceMinLot. Aborting.");
+         return 0.0;
+      }
+      Alert("Warning: Calculated lot (", calculatedLot, ") < min lot (", volumeMin,
+            "). Forcing min lot. Actual risk ~", DoubleToString(minLotRisk, 2),
+            " USD (target was ", DoubleToString(riskAmount, 2), ").");
       calculatedLot = volumeMin;
    }
 
@@ -218,6 +230,18 @@ void OnStart()
       return;
    }
 
+   //--- Broker min stop distance (SL/TP must sit at least this far from price)
+   double point = SymbolInfoDouble(currentSymbol, SYMBOL_POINT);
+   long   stopsLevel = SymbolInfoInteger(currentSymbol, SYMBOL_TRADE_STOPS_LEVEL);
+   double minDist = stopsLevel * point;
+   if(minDist > 0.0 && (askPrice - normSL) < minDist)
+   {
+      Alert("Error: SL too close. Distance (", DoubleToString(askPrice - normSL, digits),
+            ") < broker minimum stops level (", DoubleToString(minDist, digits),
+            "). Widen the Stop Loss.");
+      return;
+   }
+
    //--- 2. CALCULATE LOT SIZE ---
    double lotSize = CalculateLotSize(currentSymbol, ORDER_TYPE_BUY, askPrice, normSL, InpRiskSizeUSD);
 
@@ -229,6 +253,18 @@ void OnStart()
    if(InpSetTP)
    {
       tp = NormalizeDouble(askPrice + (askPrice - normSL) * InpRR, digits);
+      if(tp <= 0.0)
+      {
+         Alert("Error: Calculated TP (", tp, ") is invalid (<= 0). Lower the RR ratio.");
+         return;
+      }
+      if(minDist > 0.0 && (tp - askPrice) < minDist)
+      {
+         Alert("Error: TP too close. Distance (", DoubleToString(tp - askPrice, digits),
+               ") < broker minimum stops level (", DoubleToString(minDist, digits),
+               "). Raise the RR ratio.");
+         return;
+      }
       Print("Take Profit: ", tp, " (RR: ", InpRR, ")");
    }
 
@@ -236,7 +272,9 @@ void OnStart()
          " entry=", askPrice, " sl=", normSL);
 
    //--- 4. OPEN BUY POSITION ---
-   if(trade.Buy(lotSize, currentSymbol, askPrice, normSL, tp, "QuickBuyv2 Script Order"))
+   // Pass price 0.0 so terminal fills at current market; set slippage tolerance.
+   trade.SetDeviationInPoints(InpDeviation);
+   if(trade.Buy(lotSize, currentSymbol, 0.0, normSL, tp, "QuickBuyv2 Script Order"))
    {
       Print("BUY order successfully placed for ", currentSymbol, " with lot size ", lotSize);
       Alert("Success! BUY order placed for ", lotSize, " lots on ", currentSymbol);
