@@ -27,16 +27,23 @@ bool EnsureSymbolReady(const string symbol)
       return false;
    }
 
-   // Force fresh quote
+   // Wait for BOTH a fresh quote AND the symbol's calculation data to sync.
+   // On first access (fresh subscribe or after reconnect/idle) quotes arrive
+   // before the contract specs (tick value, margin, OrderCalcProfit) are ready,
+   // which makes loss-per-lot calc return 0. Poll until tick value is populated.
    MqlTick tick;
-   for(int i = 0; i < 5; i++)
+   for(int i = 0; i < 50; i++)   // up to ~5 seconds
    {
-      if(SymbolInfoTick(symbol, tick) && tick.ask > 0.0 && tick.bid > 0.0)
+      bool   haveTick  = SymbolInfoTick(symbol, tick) && tick.ask > 0.0 && tick.bid > 0.0;
+      double tickValue = SymbolInfoDouble(symbol, SYMBOL_TRADE_TICK_VALUE);
+      if(haveTick && tickValue > 0.0)
          return true;
-      Sleep(50);
+      Sleep(100);
    }
 
-   Alert("Error: No valid tick data for ", symbol, ". Error: ", GetLastError());
+   Alert("Error: Symbol ", symbol, " not fully ready (quote or tick value missing). ",
+         "Tick value: ", SymbolInfoDouble(symbol, SYMBOL_TRADE_TICK_VALUE),
+         ". Wait a few seconds and run again. Error: ", GetLastError());
    return false;
 }
 
