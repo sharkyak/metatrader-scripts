@@ -24,6 +24,8 @@ string g_tp_value;
 string g_status;
 string g_buy_button;
 string g_sell_button;
+string g_rr2_button;
+string g_rr3_button;
 string g_buy_limit_button;
 string g_sell_limit_button;
 string g_entry_line;
@@ -258,7 +260,7 @@ bool CreatePanel()
 
    SetObjectPosition(g_panel, 10, 20);
    ObjectSetInteger(0, g_panel, OBJPROP_XSIZE, 340);
-   ObjectSetInteger(0, g_panel, OBJPROP_YSIZE, 270);
+   ObjectSetInteger(0, g_panel, OBJPROP_YSIZE, 315);
    ObjectSetInteger(0, g_panel, OBJPROP_BGCOLOR, C'27,31,36');
    ObjectSetInteger(0, g_panel, OBJPROP_BORDER_COLOR, C'80,86,94');
    ObjectSetInteger(0, g_panel, OBJPROP_BACK, false);
@@ -279,15 +281,19 @@ bool CreatePanel()
    if(!CreateLabel(g_tp_value, "TP: --", 20, 156, C'105,220,140'))
       return false;
 
-   if(!CreateButton(g_buy_button, "BUY", 20, 185, 150, 28))
+   if(!CreateButton(g_rr2_button, "2RR", 20, 185, 150, 28))
       return false;
-   if(!CreateButton(g_sell_button, "SELL", 180, 185, 150, 28))
+   if(!CreateButton(g_rr3_button, "3RR", 180, 185, 150, 28))
       return false;
-   if(!CreateButton(g_buy_limit_button, "BUY LIMIT", 20, 221, 150, 28))
+   if(!CreateButton(g_buy_button, "BUY", 20, 221, 150, 28))
       return false;
-   if(!CreateButton(g_sell_limit_button, "SELL LIMIT", 180, 221, 150, 28))
+   if(!CreateButton(g_sell_button, "SELL", 180, 221, 150, 28))
       return false;
-   if(!CreateLabel(g_status, "Move lines, then choose order", 20, 261, C'165,172,181', 8))
+   if(!CreateButton(g_buy_limit_button, "BUY LIMIT", 20, 257, 150, 28))
+      return false;
+   if(!CreateButton(g_sell_limit_button, "SELL LIMIT", 180, 257, 150, 28))
+      return false;
+   if(!CreateLabel(g_status, "Move lines, then choose order", 20, 297, C'165,172,181', 8))
       return false;
 
    return true;
@@ -455,6 +461,27 @@ void UpdatePanel()
    }
 
    UpdateLineLabels();
+}
+
+void SetRiskReward(const double rewardMultiple)
+{
+   double sl = GetLinePrice(g_sl_line);
+   double tp = GetLinePrice(g_tp_line);
+
+   if(sl <= 0.0 || tp <= 0.0 || MathAbs(sl - tp) < SymbolInfoDouble(_Symbol, SYMBOL_POINT) * 0.5)
+   {
+      SetStatus("SL and TP must be different", C'240,125,100');
+      return;
+   }
+
+   // Keep SL and TP fixed. Move Entry between them so reward:risk equals
+   // the selected multiple for either buy or sell line orientation.
+   double entry = (rewardMultiple * sl + tp) / (rewardMultiple + 1.0);
+   SetLinePrice(g_entry_line, entry);
+   g_entry_line_touched = true;
+   UpdatePanel();
+   SetStatus("RR 1:" + DoubleToString(rewardMultiple, 0) + " applied");
+   ChartRedraw();
 }
 
 //+------------------------------------------------------------------+
@@ -655,6 +682,8 @@ int OnInit()
    g_status           = g_prefix + "Status";
    g_buy_button       = g_prefix + "Buy";
    g_sell_button      = g_prefix + "Sell";
+   g_rr2_button       = g_prefix + "RR2";
+   g_rr3_button       = g_prefix + "RR3";
    g_buy_limit_button = g_prefix + "BuyLimit";
    g_sell_limit_button = g_prefix + "SellLimit";
    g_entry_line       = g_prefix + "EntryLine";
@@ -699,7 +728,11 @@ void OnChartEvent(const int id, const long &lparam, const double &dparam,
 {
    if(id == CHARTEVENT_OBJECT_CLICK)
    {
-      if(sparam == g_buy_button)
+      if(sparam == g_rr2_button)
+         SetRiskReward(2.0);
+      else if(sparam == g_rr3_button)
+         SetRiskReward(3.0);
+      else if(sparam == g_buy_button)
          PlaceOrder(ORDER_TYPE_BUY);
       else if(sparam == g_sell_button)
          PlaceOrder(ORDER_TYPE_SELL);
