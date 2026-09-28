@@ -652,8 +652,7 @@ void PlaceOrder(const ENUM_ORDER_TYPE type)
             " retcode=", retcode);
       Alert("Trade Assistant: order placed. Volume ",
             DoubleToString(volume, g_volume_digits));
-      DeleteAssistantObjects();
-      g_ready = false;
+      ExpertRemove();
    }
    else
    {
