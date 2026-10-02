@@ -596,6 +596,41 @@ bool IsTradeAccepted(const uint retcode)
 }
 
 //+------------------------------------------------------------------+
+//| Delete existing limit orders for this EA                         |
+//+------------------------------------------------------------------+
+bool DeleteExistingLimitOrders(string &errorText)
+{
+   errorText = "";
+
+   for(int i = OrdersTotal() - 1; i >= 0; i--)
+   {
+      ulong ticket = OrderGetTicket(i);
+      if(ticket == 0)
+         continue;
+
+      string orderSymbol = OrderGetString(ORDER_SYMBOL);
+      ulong orderMagic = (ulong)OrderGetInteger(ORDER_MAGIC);
+      ENUM_ORDER_TYPE orderType = (ENUM_ORDER_TYPE)OrderGetInteger(ORDER_TYPE);
+      if(orderSymbol != _Symbol || orderMagic != InpMagicNumber ||
+         (orderType != ORDER_TYPE_BUY_LIMIT && orderType != ORDER_TYPE_SELL_LIMIT))
+         continue;
+
+      if(!trade.OrderDelete(ticket) || trade.ResultRetcode() != TRADE_RETCODE_DONE)
+      {
+         errorText = StringFormat("Could not delete existing limit order %I64u: %s",
+                                  ticket, trade.ResultComment());
+         Print(errorText, " Retcode=", trade.ResultRetcode());
+         return false;
+      }
+
+      Print("Deleted existing limit order. Ticket=", ticket,
+            " Magic=", orderMagic);
+   }
+
+   return true;
+}
+
+//+------------------------------------------------------------------+
 //| Place selected order                                             |
 //+------------------------------------------------------------------+
 void PlaceOrder(const ENUM_ORDER_TYPE type)
@@ -627,6 +662,14 @@ void PlaceOrder(const ENUM_ORDER_TYPE type)
 
    trade.SetExpertMagicNumber(InpMagicNumber);
    trade.SetDeviationInPoints(InpDeviation);
+
+   if(!DeleteExistingLimitOrders(errorText))
+   {
+      SetStatus("Order cancelled: " + errorText, C'240,125,100');
+      Alert("Trade Assistant: ", errorText,
+            ". New order was not sent.");
+      return;
+   }
 
    string comment = "Trade Assistant";
    bool placed = false;
